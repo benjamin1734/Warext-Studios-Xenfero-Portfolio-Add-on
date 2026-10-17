@@ -127,57 +127,120 @@ class Portfolio extends Repository
     {
         $tags = $this->normalizeTags($rawTags);
         $db = $this->db();
-        $existingIds = array_map('intval', $db->fetchAllColumn(
-            'SELECT tag_id FROM xf_wrxt_portfolio_tag_map WHERE portfolio_id = ?',
-            $portfolio->portfolio_id
-        ));
-        $newIds = [];
-        $order = 0;
+        $portfolioId = (int)$portfolio->portfolio_id;
 
-        foreach ($tags as $normalized => $display)
+        $db->beginTransaction();
+        try
         {
-            $tagId = (int)$db->fetchOne('SELECT tag_id FROM xf_wrxt_portfolio_tag WHERE tag_normalized = ?', $normalized);
-            if (!$tagId)
+            $existingIds = array_map('intval', $db->fetchAllColumn(
+                'SELECT tag_id FROM xf_wrxt_portfolio_tag_map WHERE portfolio_id = ?',
+                $portfolioId
+            ));
+
+            $idsByName = [];
+            $names = array_keys($tags);
+            if ($names)
             {
+                $placeholder = implode(', ', array_fill(0, count($names), '?'));
+                foreach ($db->fetchAll(
+                    'SELECT tag_id, tag_normalized FROM xf_wrxt_portfolio_tag WHERE tag_normalized IN (' . $placeholder . ')',
+                    $names
+                ) as $row)
+                {
+                    $idsByName[(string)$row['tag_normalized']] = (int)$row['tag_id'];
+                }
+
+                $missing = array_diff_key($tags, $idsByName);
+                foreach ($missing as $normalized => $display)
+                {
+                    $db->query(
+                        'INSERT IGNORE INTO xf_wrxt_portfolio_tag (tag, tag_normalized, use_count, created_date) VALUES (?, ?, 0, ?)',
+                        [$display, $normalized, \XF::$time]
+                    );
+                }
+
+                if ($missing)
+                {
+                    $missingNames = array_keys($missing);
+                    $placeholder = implode(', ', array_fill(0, count($missingNames), '?'));
+                    foreach ($db->fetchAll(
+                        'SELECT tag_id, tag_normalized FROM xf_wrxt_portfolio_tag WHERE tag_normalized IN (' . $placeholder . ')',
+                        $missingNames
+                    ) as $row)
+                    {
+                        $idsByName[(string)$row['tag_normalized']] = (int)$row['tag_id'];
+                    }
+                }
+            }
+
+            $newIds = [];
+            $order = 0;
+            foreach ($tags as $normalized => $display)
+            {
+                $tagId = (int)($idsByName[$normalized] ?? 0);
+                if ($tagId <= 0)
+                {
+                    throw new \RuntimeException('Portfolio tag ID could not be resolved.');
+                }
+
+                $newIds[] = $tagId;
                 $db->query(
-                    'INSERT IGNORE INTO xf_wrxt_portfolio_tag (tag, tag_normalized, use_count, created_date) VALUES (?, ?, 0, ?)',
-                    [$display, $normalized, \XF::$time]
+                    'INSERT INTO xf_wrxt_portfolio_tag_map (portfolio_id, tag_id, display_order) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE display_order = VALUES(display_order)',
+                    [$portfolioId, $tagId, $order++]
                 );
-                $tagId = (int)$db->fetchOne('SELECT tag_id FROM xf_wrxt_portfolio_tag WHERE tag_normalized = ?', $normalized);
             }
 
-            $newIds[] = $tagId;
-            $db->query(
-                'INSERT INTO xf_wrxt_portfolio_tag_map (portfolio_id, tag_id, display_order) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE display_order = VALUES(display_order)',
-                [$portfolio->portfolio_id, $tagId, $order++]
-            );
-        }
-
-        $removeIds = array_diff($existingIds, $newIds);
-        foreach ($removeIds as $tagId)
-        {
-            $db->query(
-                'DELETE FROM xf_wrxt_portfolio_tag_map WHERE portfolio_id = ? AND tag_id = ?',
-                [$portfolio->portfolio_id, $tagId]
-            );
-        }
-
-        $affected = array_unique(array_merge($existingIds, $newIds));
-        foreach ($affected as $tagId)
-        {
-            $count = (int)$db->fetchOne('SELECT COUNT(*) FROM xf_wrxt_portfolio_tag_map WHERE tag_id = ?', $tagId);
-            if ($count)
+            $removeIds = array_values(array_diff($existingIds, $newIds));
+            if ($removeIds)
             {
-                $db->query('UPDATE xf_wrxt_portfolio_tag SET use_count = ? WHERE tag_id = ?', [$count, $tagId]);
+                $placeholder = implode(', ', array_fill(0, count($removeIds), '?'));
+                $db->query(
+                    'DELETE FROM xf_wrxt_portfolio_tag_map WHERE portfolio_id = ? AND tag_id IN (' . $placeholder . ')',
+                    array_merge([$portfolioId], $removeIds)
+                );
             }
-            else
-            {
-                $db->query('DELETE FROM xf_wrxt_portfolio_tag WHERE tag_id = ?', $tagId);
-            }
-        }
 
-        $portfolio->tags_cache = implode(', ', array_values($tags));
-        $portfolio->tag_count = count($tags);
-        $portfolio->saveIfChanged();
+            $affected = array_values(array_unique(array_merge($existingIds, $newIds)));
+            sort($affected, SORT_NUMERIC);
+            if ($affected)
+            {
+                $placeholder = implode(', ', array_fill(0, count($affected), '?'));
+                $counts = [];
+                foreach ($db->fetchAll(
+                    'SELECT tag_id, COUNT(*) AS total FROM xf_wrxt_portfolio_tag_map WHERE tag_id IN (' . $placeholder . ') GROUP BY tag_id',
+                    $affected
+                ) as $row)
+                {
+                    $counts[(int)$row['tag_id']] = (int)$row['total'];
+                }
+
+                foreach ($affected as $tagId)
+                {
+                    $count = $counts[$tagId] ?? 0;
+                    if ($count > 0)
+                    {
+                        $db->query('UPDATE xf_wrxt_portfolio_tag SET use_count = ? WHERE tag_id = ?', [$count, $tagId]);
+                    }
+                    else
+                    {
+                        $db->query(
+                            'DELETE FROM xf_wrxt_portfolio_tag WHERE tag_id = ? AND NOT EXISTS (SELECT 1 FROM xf_wrxt_portfolio_tag_map WHERE tag_id = ?)',
+                            [$tagId, $tagId]
+                        );
+                    }
+                }
+            }
+
+            $portfolio->tags_cache = implode(', ', array_values($tags));
+            $portfolio->tag_count = count($tags);
+            $portfolio->saveIfChanged();
+            $db->commit();
+        }
+        catch (\Throwable $e)
+        {
+            $db->rollback();
+            throw $e;
+        }
     }
+
 }
