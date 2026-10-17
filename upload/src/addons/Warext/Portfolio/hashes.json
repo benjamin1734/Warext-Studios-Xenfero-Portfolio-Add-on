@@ -43,7 +43,7 @@
     "src/addons/Warext/Portfolio/Pub/View/Model/Data.php": "316545323182b81206372988da98921fcbfaa621f596dd63cb809ec74eccbaff",
     "src/addons/Warext/Portfolio/Pub/View/Model/Frame.php": "ae410940d2a470cff76a7502f9a995b6471ae17a859902f193b2b3ca82153750",
     "src/addons/Warext/Portfolio/Report/Portfolio.php": "ef554fc1030613493088d4ef833c2dd77c6c832db6478fd88593a30a9d9831d2",
-    "src/addons/Warext/Portfolio/Repository/Portfolio.php": "d32c5fbc79e521e97a748536ae56ea1661f4c1396c3c6e6bb95e229b175afaab",
+    "src/addons/Warext/Portfolio/Repository/Portfolio.php": "8938f120e01da9ab97c689d64c0ea455875e8b907f4f12b6104928bffaa18a03",
     "src/addons/Warext/Portfolio/Service/AuditLogger.php": "7b29c9a45265f63c3fe2eae571a0cc95af80a1d3f4db1442c3e40fe402d970ef",
     "src/addons/Warext/Portfolio/Service/BlobGarbageCollector.php": "1213790ebf9609d3d9e32118bd72eab205fcef548cb804ec0fa70e337d2474fd",
     "src/addons/Warext/Portfolio/Service/BlobManager.php": "5cbf656281a2420e182449b810258acc85087cb263fd4485f4506ed2dba4f59b",
@@ -104,5 +104,5 @@
     "src/addons/Warext/Portfolio/_data/routes.xml": "305717b30edc38b6bbac5c992d3b59506799fffdef837cd1897b54e00be841ec",
     "src/addons/Warext/Portfolio/_data/template_modifications.xml": "2d73c28ba873d3af2d2fb66619d730e638e68c79858585369843097868f4314b",
     "src/addons/Warext/Portfolio/_data/templates.xml": "10fcc7185e383f3f6ccd4ac5b862f0049b0e45316ad404f52636afe0df97fadd",
-    "src/addons/Warext/Portfolio/addon.json": "52bc85a2095805b499ee2ef2326aaac57c7d8f5dcca6c53fd1134946901cf412"
+    "src/addons/Warext/Portfolio/addon.json": "b26b6022de71ad50cdf2de411063556b8b6faf3cdc684604dded9b04bf88bade"
 }
